@@ -118,7 +118,6 @@ fun BackgroundImageContainer(content: @Composable () -> Unit) {
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
-
         // Content
         content()
     }
@@ -366,8 +365,8 @@ fun TicTacToeGame(viewModel: TicTacToeViewModel = viewModel()) {
                     .padding(horizontal = 24.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MarkerCounter(player = "X", count = xMarkerCount, isCurrentPlayer = currentPlayer == "X")
-                MarkerCounter(player = "O", count = oMarkerCount, isCurrentPlayer = currentPlayer == "O")
+                //MarkerCounter(player = "X", count = xMarkerCount, isCurrentPlayer = currentPlayer == "X")
+                //MarkerCounter(player = "O", count = oMarkerCount, isCurrentPlayer = currentPlayer == "O")
             }
 
             // Game status card
@@ -407,57 +406,6 @@ fun TicTacToeGame(viewModel: TicTacToeViewModel = viewModel()) {
     }
 }
 
-@Composable
-fun MarkerCounter(player: String, count: Int, isCurrentPlayer: Boolean) {
-    Card(
-        modifier = Modifier
-            .width(110.dp)
-            .height(60.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrentPlayer) {
-                when (player) {
-                    "X" -> MaterialTheme.colorScheme.primaryContainer
-                    else -> MaterialTheme.colorScheme.secondaryContainer
-                }
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-            }
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isCurrentPlayer) 4.dp else 1.dp)
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Text(
-                text = "Player $player",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = count.toString(),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = when (player) {
-                        "X" -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.secondary
-                    }
-                )
-                Text(
-                    text = "/3",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = if (count >= 3) Color.Red else Color.DarkGray
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun StatusCard(gameStatus: GameStatus, currentPlayer: String) {
@@ -634,21 +582,7 @@ fun TicTacToeGamePreviewable() {
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-
-
                 Spacer(modifier = Modifier.height(16.dp))
-
-                // Marker counters
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    MarkerCounter(player = "X", count = xMarkerCount.value, isCurrentPlayer = currentPlayer.value == "X")
-                    MarkerCounter(player = "O", count = oMarkerCount.value, isCurrentPlayer = currentPlayer.value == "O")
-                }
-
                 // Game status card
                 StatusCard(gameStatus.value, currentPlayer.value)
 
@@ -707,25 +641,6 @@ fun GameBoardPreview() {
                 removingPosition = null,
                 onCellClick = {}
             )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun MarkerCounterPreview() {
-    TicTacToeTheme {
-        BackgroundImageContainer {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                MarkerCounter(player = "X", count = 1, isCurrentPlayer = true)
-                MarkerCounter(player = "O", count = 2, isCurrentPlayer = false)
-                MarkerCounter(player = "X", count = 3, isCurrentPlayer = false)
-            }
         }
     }
 }
