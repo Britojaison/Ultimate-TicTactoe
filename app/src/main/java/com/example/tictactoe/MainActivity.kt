@@ -1,4 +1,3 @@
-
 // MainActivity.kt
 package com.example.tictactoe
 
@@ -11,10 +10,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -113,7 +116,7 @@ fun BackgroundImageContainer(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
         // Background image
         Image(
-            painter = painterResource(id = R.drawable.background), // You'll need to add this image to your resources
+            painter = painterResource(id = R.drawable.background1),
             contentDescription = "Background Image",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
@@ -149,13 +152,20 @@ class TicTacToeViewModel(private val savedStateHandle: SavedStateHandle) : ViewM
     private val _removingPosition = MutableStateFlow(savedStateHandle.get<Int?>("removingPosition") ?: null)
     val removingPosition: StateFlow<Int?> = _removingPosition
 
+    // Scoreboard - session-based scores (resets on app kill/launch, not on pause/resume)
+    private val _xScore = MutableStateFlow(savedStateHandle.get<Int>("xScore") ?: 0)
+    val xScore: StateFlow<Int> = _xScore
+
+    private val _oScore = MutableStateFlow(savedStateHandle.get<Int>("oScore") ?: 0)
+    val oScore: StateFlow<Int> = _oScore
+
     private val winPatterns = listOf(
         listOf(0, 1, 2), listOf(3, 4, 5), listOf(6, 7, 8), // Rows
         listOf(0, 3, 6), listOf(1, 4, 7), listOf(2, 5, 8), // Columns
         listOf(0, 4, 8), listOf(2, 4, 6)                   // Diagonals
     )
 
-    // Save state when it changes
+    // Save state when it changes (but scores will reset on app kill)
     private fun saveState() {
         savedStateHandle["board"] = _board.value
         savedStateHandle["currentPlayer"] = _currentPlayer.value
@@ -164,6 +174,9 @@ class TicTacToeViewModel(private val savedStateHandle: SavedStateHandle) : ViewM
         savedStateHandle["xPositions"] = _xPositions.value
         savedStateHandle["oPositions"] = _oPositions.value
         savedStateHandle["removingPosition"] = _removingPosition.value
+        // Save scores for onPause/onResume scenarios, but they'll reset on app kill
+        savedStateHandle["xScore"] = _xScore.value
+        savedStateHandle["oScore"] = _oScore.value
     }
 
     // Make a move
@@ -188,6 +201,8 @@ class TicTacToeViewModel(private val savedStateHandle: SavedStateHandle) : ViewM
                         _gameStatus.value = GameStatus.X_WINS
                         _winningLine.value = potentialWin.second
                         _board.value = newBoard
+                        // Update score
+                        _xScore.value = _xScore.value + 1
                         saveState()
                         return
                     }
@@ -216,6 +231,8 @@ class TicTacToeViewModel(private val savedStateHandle: SavedStateHandle) : ViewM
                         _gameStatus.value = GameStatus.O_WINS
                         _winningLine.value = potentialWin.second
                         _board.value = newBoard
+                        // Update score
+                        _oScore.value = _oScore.value + 1
                         saveState()
                         return
                     }
@@ -275,6 +292,13 @@ class TicTacToeViewModel(private val savedStateHandle: SavedStateHandle) : ViewM
             val winner = _board.value[pattern[0]]
             _gameStatus.value = if (winner == "X") GameStatus.X_WINS else GameStatus.O_WINS
             _winningLine.value = pattern
+
+            // Update scores
+            if (winner == "X") {
+                _xScore.value = _xScore.value + 1
+            } else {
+                _oScore.value = _oScore.value + 1
+            }
             return
         }
 
@@ -284,7 +308,7 @@ class TicTacToeViewModel(private val savedStateHandle: SavedStateHandle) : ViewM
         }
     }
 
-    // Reset the game
+    // Reset the game (but keep scores)
     fun resetGame() {
         _board.value = List(9) { "" }
         _currentPlayer.value = "X"
@@ -294,7 +318,14 @@ class TicTacToeViewModel(private val savedStateHandle: SavedStateHandle) : ViewM
         _oPositions.value = emptyList()
         _removingPosition.value = null
 
-        // Save state after reset
+        // Save state after reset (scores remain unchanged)
+        saveState()
+    }
+
+    // Reset scores (for new session or manual reset)
+    fun resetScores() {
+        _xScore.value = 0
+        _oScore.value = 0
         saveState()
     }
 
@@ -328,11 +359,8 @@ fun TicTacToeGame(viewModel: TicTacToeViewModel = viewModel()) {
     val xPositions by viewModel.xPositions.collectAsStateWithLifecycle()
     val oPositions by viewModel.oPositions.collectAsStateWithLifecycle()
     val removingPosition by viewModel.removingPosition.collectAsStateWithLifecycle()
-
-    // Calculate marker counts
-    val xMarkerCount = xPositions.size
-    val oMarkerCount = oPositions.size
-    val currentMarkerCount = if (currentPlayer == "X") xMarkerCount else oMarkerCount
+    val xScore by viewModel.xScore.collectAsStateWithLifecycle()
+    val oScore by viewModel.oScore.collectAsStateWithLifecycle()
 
     Box(
         modifier = Modifier
@@ -354,20 +382,18 @@ fun TicTacToeGame(viewModel: TicTacToeViewModel = viewModel()) {
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-
-
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Marker counters
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                //MarkerCounter(player = "X", count = xMarkerCount, isCurrentPlayer = currentPlayer == "X")
-                //MarkerCounter(player = "O", count = oMarkerCount, isCurrentPlayer = currentPlayer == "O")
-            }
+            // Scoreboard replacing the "Your Turn" indicator
+            ScoreBoard(
+                xScore = xScore,
+                oScore = oScore,
+                currentPlayer = currentPlayer,
+                gameStatus = gameStatus,
+                onResetScores = { viewModel.resetScores() }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Game status card
             StatusCard(gameStatus, currentPlayer)
@@ -384,70 +410,245 @@ fun TicTacToeGame(viewModel: TicTacToeViewModel = viewModel()) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Reset button
-            Button(
-                onClick = { viewModel.resetGame() },
-                modifier = Modifier
-                    .height(50.dp)
-                    .width(200.dp),
-                shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            // Button row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // New Game button
+                Button(
+                    onClick = { viewModel.resetGame() },
+                    modifier = Modifier
+                        .height(50.dp)
+                        .weight(1f),
+                    shape = RoundedCornerShape(25.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Text(
+                        text = "New Game",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Reset Scores button
+                OutlinedButton(
+                    onClick = { viewModel.resetScores() },
+                    modifier = Modifier
+                        .height(50.dp)
+                        .weight(1f),
+                    shape = RoundedCornerShape(25.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        text = "Reset Scores",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ScoreBoard(
+    xScore: Int,
+    oScore: Int,
+    currentPlayer: String,
+    gameStatus: GameStatus,
+    onResetScores: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Scoreboard Title
+            Text(
+                text = "SCOREBOARD",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Scores Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // X Player Score
+                ScoreSection(
+                    player = "X",
+                    score = xScore,
+                    isCurrentPlayer = currentPlayer == "X" && gameStatus == GameStatus.PLAYING,
+                    playerColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // VS Divider
                 Text(
-                    text = "New Game",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    text = "VS",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                // O Player Score
+                ScoreSection(
+                    player = "O",
+                    score = oScore,
+                    isCurrentPlayer = currentPlayer == "O" && gameStatus == GameStatus.PLAYING,
+                    playerColor = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
     }
 }
 
+@Composable
+fun ScoreSection(
+    player: String,
+    score: Int,
+    isCurrentPlayer: Boolean,
+    playerColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isCurrentPlayer) 1.1f else 1f,
+        animationSpec = tween(300),
+        label = "playerScale"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.scale(scale)
+    ) {
+        // Player coin and indicator
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            GameCoinImage(
+                player = player,
+                modifier = Modifier.size(32.dp),
+                showShadow = true
+            )
+
+            if (isCurrentPlayer) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "◀",
+                    color = playerColor,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Score
+        Text(
+            text = score.toString(),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = playerColor
+        )
+
+
+    }
+}
 
 @Composable
 fun StatusCard(gameStatus: GameStatus, currentPlayer: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = when (gameStatus) {
-                GameStatus.PLAYING -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
-                GameStatus.X_WINS -> Color(0xCCDCEDC8)  // More transparent
-                GameStatus.O_WINS -> Color(0xCCDCEDC8)  // More transparent
-                GameStatus.DRAW -> Color(0xCCFFECB3)    // More transparent
-            }
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Box(
+    // Only show status card when game is not in playing state
+    if (gameStatus != GameStatus.PLAYING) {
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = when (gameStatus) {
-                    GameStatus.PLAYING -> "Player $currentPlayer's Turn"
-                    GameStatus.X_WINS -> "Player X Wins!"
-                    GameStatus.O_WINS -> "Player O Wins!"
-                    GameStatus.DRAW -> "It's a Draw!"
-                },
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = when (gameStatus) {
-                    GameStatus.PLAYING -> if (currentPlayer == "X")
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.secondary
-                    GameStatus.X_WINS -> MaterialTheme.colorScheme.primary
-                    GameStatus.O_WINS -> MaterialTheme.colorScheme.secondary
-                    GameStatus.DRAW -> Color(0xFF795548)
+                .padding(horizontal = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = when (gameStatus) {
+                    GameStatus.X_WINS -> Color(0xCCDCEDC8)  // More transparent
+                    GameStatus.O_WINS -> Color(0xCCDCEDC8)  // More transparent
+                    GameStatus.DRAW -> Color(0xCCFFECB3)    // More transparent
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
                 }
-            )
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    when (gameStatus) {
+                        GameStatus.X_WINS -> {
+                            GameCoinImage(
+                                player = "X",
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .padding(end = 8.dp),
+                                showShadow = true
+                            )
+                            Text(
+                                text = "Wins!",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        GameStatus.O_WINS -> {
+                            GameCoinImage(
+                                player = "O",
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .padding(end = 8.dp),
+                                showShadow = true
+                            )
+                            Text(
+                                text = "Wins!",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        GameStatus.DRAW -> {
+                            Text(
+                                text = "It's a Draw!",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF795548)
+                            )
+                        }
+                        else -> { /* Do nothing for PLAYING state */ }
+                    }
+                }
+            }
         }
     }
 }
@@ -464,7 +665,7 @@ fun GameBoard(
             .width(320.dp)
             .aspectRatio(1f),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0x66EEEEEE)  // Very transparent gray
+            containerColor = Color(0x5C98A4B6)  // Very transparent gray
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
@@ -517,7 +718,7 @@ fun Cell(
                 if (isPartOfWinningLine)
                     Color(0x55FFEB3B)  // More transparent yellow highlight
                 else
-                    Color(0x55FFFFFF)  // Semi-transparent cell background
+                    Color(0xFF2A356E)  // Semi-transparent cell background
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -525,17 +726,48 @@ fun Cell(
         AnimatedVisibility(
             visible = value.isNotEmpty() && !isBeingRemoved,
             enter = fadeIn(animationSpec = tween(200)) + scaleIn(animationSpec = tween(300)),
-            exit = fadeOut(animationSpec = tween(300))
+            exit = fadeOut(animationSpec = tween(300)) + scaleOut(animationSpec = tween(300))
         ) {
-            Text(
-                text = value,
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                color = if (value == "X") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+            GameCoinImage(
+                player = value,
+                modifier = Modifier
+                    .size(60.dp)
+                    .padding(8.dp),
+                showShadow = true
             )
         }
     }
+}
+
+// New composable for displaying game coin images
+@Composable
+fun GameCoinImage(
+    player: String,
+    modifier: Modifier = Modifier,
+    showShadow: Boolean = false
+) {
+    val imageResource = when (player) {
+        "X" -> R.drawable.coin_x  // Add your X coin image to drawable folder
+        "O" -> R.drawable.coin_o  // Add your O coin image to drawable folder
+        else -> return // Don't render anything for empty cells
+    }
+
+    val coinModifier = if (showShadow) {
+        modifier
+            .shadow(
+                elevation = 4.dp,
+                shape = CircleShape
+            )
+            .clip(CircleShape)
+    } else {
+        modifier.clip(CircleShape)
+    }
+
+    Image(
+        painter = painterResource(id = imageResource),
+        contentDescription = "$player coin",
+        contentScale = ContentScale.Crop
+    )
 }
 
 // Theme setup with custom color scheme
@@ -558,9 +790,9 @@ fun TicTacToeGamePreviewable() {
     val currentPlayer = remember { mutableStateOf("X") }
     val gameStatus = remember { mutableStateOf(GameStatus.PLAYING) }
     val winningLine = remember { mutableStateOf(emptyList<Int>()) }
-    val xMarkerCount = remember { mutableStateOf(2) }
-    val oMarkerCount = remember { mutableStateOf(1) }
     val removingPosition = remember { mutableStateOf<Int?>(null) }
+    val xScore = remember { mutableStateOf(3) }
+    val oScore = remember { mutableStateOf(2) }
 
     BackgroundImageContainer {
         Box(
@@ -583,6 +815,18 @@ fun TicTacToeGamePreviewable() {
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // Scoreboard
+                ScoreBoard(
+                    xScore = xScore.value,
+                    oScore = oScore.value,
+                    currentPlayer = currentPlayer.value,
+                    gameStatus = gameStatus.value,
+                    onResetScores = { }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Game status card
                 StatusCard(gameStatus.value, currentPlayer.value)
 
@@ -598,23 +842,46 @@ fun TicTacToeGamePreviewable() {
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Reset button
-                Button(
-                    onClick = { },  // No-op for preview
-                    modifier = Modifier
-                        .height(50.dp)
-                        .width(200.dp),
-                    shape = RoundedCornerShape(25.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                // Button row
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(
-                        text = "New Game",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    // New Game button
+                    Button(
+                        onClick = { },  // No-op for preview
+                        modifier = Modifier
+                            .height(50.dp)
+                            .weight(1f),
+                        shape = RoundedCornerShape(25.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = "New Game",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Reset Scores button
+                    OutlinedButton(
+                        onClick = { },  // No-op for preview
+                        modifier = Modifier
+                            .height(50.dp)
+                            .weight(1f),
+                        shape = RoundedCornerShape(25.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = "Reset Scores",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -647,6 +914,32 @@ fun GameBoardPreview() {
 
 @Preview(showBackground = true)
 @Composable
+fun ScoreBoardPreview() {
+    TicTacToeTheme {
+        BackgroundImageContainer {
+            Column(Modifier.padding(16.dp)) {
+                ScoreBoard(
+                    xScore = 5,
+                    oScore = 3,
+                    currentPlayer = "X",
+                    gameStatus = GameStatus.PLAYING,
+                    onResetScores = {}
+                )
+                Spacer(Modifier.height(16.dp))
+                ScoreBoard(
+                    xScore = 2,
+                    oScore = 4,
+                    currentPlayer = "O",
+                    gameStatus = GameStatus.O_WINS,
+                    onResetScores = {}
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
 fun StatusCardPreview() {
     TicTacToeTheme {
         BackgroundImageContainer {
@@ -658,6 +951,30 @@ fun StatusCardPreview() {
                 StatusCard(GameStatus.O_WINS, "O")
                 Spacer(Modifier.height(16.dp))
                 StatusCard(GameStatus.DRAW, "X")
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun CoinPreview() {
+    TicTacToeTheme {
+        BackgroundImageContainer {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                GameCoinImage(
+                    player = "X",
+                    modifier = Modifier.size(80.dp),
+                    showShadow = true
+                )
+                GameCoinImage(
+                    player = "O",
+                    modifier = Modifier.size(80.dp),
+                    showShadow = true
+                )
             }
         }
     }
